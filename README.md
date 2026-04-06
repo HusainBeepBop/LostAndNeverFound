@@ -146,10 +146,11 @@ This Arduino sketch provides a simple, dependency-free utility to read accelerom
 
 ## MPU6050 Motion Detector
 
-This Arduino sketch takes raw data from the MPU6050 and calculates the absolute change between polling cycles to determine if the sensor is "Stationary" or "Moving". 
+This Arduino sketch uses an MPU6050 IMU to robustly detect if it is "Stationary" or "Moving" (such as being carried in a bag or pocket). 
 
 ### Details
-- Uses a threshold-based detection on both Accelerometer and Gyroscope readings.
-- Features a debounce counter to prevent flickering between moving and stationary states.
+- **Dynamic Acceleration**: Uses a Low-Pass Filter on the accelerometer to map and subtract the baseline pull of gravity. This isolates purely dynamic "jolts" and ignores orientation changes (e.g., slowly turning the sensor over).
+- **Absolute Rotation**: Uses raw Gyroscope magnitude to detect physical spinning or swinging motions.
+- **Walking-Optimized Debounce**: Uses a full 1-second debounce window to prevent cyclical walking movements from accidentally triggering a "Stationary" reading mid-step.
+- **Easy Sensitivity Control**: Includes a simple 1-10 `SENSITIVITY` scale for quickly dialing in the detection threshold.
 - Turns the microcontroller's `LED_BUILTIN` **ON** when stationary, and **OFF** when moving.
-- Adjustable sensitivity thresholds (`ACCEL_THRESHOLD` and `GYRO_THRESHOLD`) to tune responsiveness.
