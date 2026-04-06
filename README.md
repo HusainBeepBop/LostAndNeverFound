@@ -51,3 +51,81 @@ Trying 9600 ... 1245 bytes, 0 UBX, 12 NMEA  <<<< FOUND! [NMEA]
 - The scan takes about 2 minutes to complete (1.5s per baud rate x 2 polarities x 7 rates)
 - Ensure your GPS module is powered and transmitting data
 - For u-blox modules, it may use UBX protocol at higher baud rates
+
+## GPS Test
+
+This Arduino sketch provides a comprehensive GPS testing utility that parses both UBX binary and NMEA ASCII protocols. It displays real-time GPS data including position, speed, time, and satellite information.
+
+### Supported Boards
+- Teensy 4.0 (uses Serial4 on pin 16, I2C on pins 18 SDA / 19 SCL)
+- ESP32 (uses Serial2 on pins 16 RX / 17 TX, I2C on pins 21 SDA / 22 SCL)
+
+### Hardware Requirements
+- Compatible microcontroller (Teensy 4.0 or ESP32)
+- GPS module (tested with NEO-M8N Quan-Sheng V2.0)
+- Optional: I2C compass module (QMC5883L or HMC5883L)
+- USB connection for serial monitor output
+
+### Wiring
+Connect the GPS module using the 5-6 wire cable as follows:
+
+**Teensy 4.0:**
+- RED → 5V (VIN)
+- BLACK/BROWN → GND
+- GREEN → Pin 16 (Serial4 RX) ← GPS TX
+- YELLOW → Not connected (GPS RX - not needed)
+- WHITE → Pin 19 (SCL0) ← Compass I2C SCL
+- ORANGE → Pin 18 (SDA0) ← Compass I2C SDA
+
+**ESP32:**
+- RED → 5V or 3.3V
+- BLACK/BROWN → GND
+- GREEN → Pin 16 (Serial2 RX) ← GPS TX
+- YELLOW → Not connected (GPS RX - not needed)
+- WHITE → Pin 22 (SCL) ← Compass I2C SCL
+- ORANGE → Pin 21 (SDA) ← Compass I2C SDA
+
+### Usage
+1. Connect your GPS module according to the wiring above
+2. Flash the `gps_test.ino` sketch to your board
+3. Open the serial monitor at 115200 baud
+4. The sketch will automatically start parsing GPS data and display status every second
+
+### Serial Commands
+- `d` - Toggle raw data dump (shows every byte received from GPS)
+- `n` - Toggle NMEA sentence display
+- `s` - Run I2C scan to detect compass and other I2C devices
+
+### GPS Data Displayed
+- Protocol detected (UBX or NMEA)
+- Fix status and type
+- Number of satellites
+- HDOP (Horizontal Dilution of Precision)
+- Latitude and Longitude
+- Altitude (MSL)
+- Speed (knots)
+- Course (degrees)
+- UTC Time and Date
+- Data age (milliseconds since last update)
+
+### Example Output
+```
+--------------------------------------------
+Bytes received: 1250
+Protocol: NMEA
+Fix:  YES  type=1  sats=8  HDOP=1.2
+Lat:  37.7749000 deg
+Lon:  -122.4194000 deg
+Alt:  15.3 m MSL
+Speed: 0.0 kn
+Crs:  0.0 deg
+Time: 12:34:56 UTC  01/15/2024
+Age:  250 ms
+```
+
+### Notes
+- GPS baud rate is set to 230400 (adjust `GPS_BAUD` define if needed)
+- Auto-detects UBX binary or NMEA ASCII protocols
+- I2C scan helps verify compass connection
+- GPS fix may take 30-90 seconds outdoors
+- If no data is received, try swapping the GREEN and YELLOW wires on the RX pin
