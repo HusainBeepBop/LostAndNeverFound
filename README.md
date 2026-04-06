@@ -129,3 +129,27 @@ Age:  250 ms
 - I2C scan helps verify compass connection
 - GPS fix may take 30-90 seconds outdoors
 - If no data is received, try swapping the GREEN and YELLOW wires on the RX pin
+
+## MPU6050 Test
+
+This Arduino sketch provides a simple, dependency-free utility to read accelerometer, gyroscope, and temperature data from an MPU6050 IMU sensor via the I2C protocol.
+
+### Supported Boards
+- Teensy (e.g., Teensy 4.0 using pins 18 SDA / 19 SCL)
+- ESP32 / ESP8266 (using their default hardware I2C pins, typically 21 SDA / 22 SCL for ESP32)
+
+### Usage
+1. Connect the MPU6050 to the appropriate I2C pins for your microcontroller (VCC to 3.3V/5V, GND to GND, SDA to SDA, SCL to SCL).
+2. Flash the `mpu6050_test.ino` sketch.
+3. Open the serial monitor at 115200 baud.
+4. It will display raw accelerometer/gyroscope readings and formatted temperature in Celsius.
+
+## MPU6050 Motion Detector
+
+This Arduino sketch takes raw data from the MPU6050 and calculates the absolute change between polling cycles to determine if the sensor is "Stationary" or "Moving". 
+
+### Details
+- Uses a threshold-based detection on both Accelerometer and Gyroscope readings.
+- Features a debounce counter to prevent flickering between moving and stationary states.
+- Turns the microcontroller's `LED_BUILTIN` **ON** when stationary, and **OFF** when moving.
+- Adjustable sensitivity thresholds (`ACCEL_THRESHOLD` and `GYRO_THRESHOLD`) to tune responsiveness.
