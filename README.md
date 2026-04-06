@@ -63,7 +63,7 @@ This Arduino sketch provides a comprehensive GPS testing utility that parses bot
 ### Hardware Requirements
 - Compatible microcontroller (Teensy 4.0 or ESP32)
 - GPS module (tested with NEO-M8N Quan-Sheng V2.0)
-- Optional: I2C compass module (QMC5883L or HMC5883L)
+- Optional: I2C IMU/compass module (MPU6050, QMC5883L, or HMC5883L)
 - USB connection for serial monitor output
 
 ### Wiring
@@ -74,16 +74,16 @@ Connect the GPS module using the 5-6 wire cable as follows:
 - BLACK/BROWN → GND
 - GREEN → Pin 16 (Serial4 RX) ← GPS TX
 - YELLOW → Not connected (GPS RX - not needed)
-- WHITE → Pin 19 (SCL0) ← Compass I2C SCL
-- ORANGE → Pin 18 (SDA0) ← Compass I2C SDA
+- WHITE → Pin 19 (SCL0) ← Compass/MPU6050 I2C SCL
+- ORANGE → Pin 18 (SDA0) ← Compass/MPU6050 I2C SDA
 
 **ESP32:**
 - RED → 5V or 3.3V
 - BLACK/BROWN → GND
 - GREEN → Pin 16 (Serial2 RX) ← GPS TX
 - YELLOW → Not connected (GPS RX - not needed)
-- WHITE → Pin 22 (SCL) ← Compass I2C SCL
-- ORANGE → Pin 21 (SDA) ← Compass I2C SDA
+- WHITE → Pin 22 (SCL) ← Compass/MPU6050 I2C SCL
+- ORANGE → Pin 21 (SDA) ← Compass/MPU6050 I2C SDA
 
 ### Usage
 1. Connect your GPS module according to the wiring above
