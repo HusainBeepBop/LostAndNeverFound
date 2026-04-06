@@ -1,45 +1,44 @@
 #include <Wire.h>
 
-
 const int MPU_ADDR = 0x68; // Standard I2C address for MPU6050
 
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
 
-int16_t prev_ax, prev_ay, prev_az;
-int16_t prev_gx, prev_gy, prev_gz;
+// Low-Pass Filter variables to track the gravity vector
+float grav_x = 0;
+float grav_y = 0;
+float grav_z = 0;
 
 // ==========================================
 // ====== SENSITIVITY CONFIGURATION =========
 // ==========================================
-// Control how much movement is required to trigger "Moving".
-// 1  = Extremely Sensitive (Catches tiny vibrations)
-// 5  = Medium Sensitivity (Good for typical handling)
-// 10 = Very Insensitive (Needs a hard shake to trigger)
-const int SENSITIVITY = 10; 
+// We use a "Dynamic Acceleration" method. This ignores gravity and the orientation 
+// of the sensor (e.g. turning it over slowly won't trigger it), but it looks for 
+// sudden movements/spikes like walking or grabbing a bag.
+// 
+// SENSITIVITY: 
+// 1 = Extremely sensitive
+// 5 = Medium (Detects most handling / walking)
+// 10 = Very insensitive (Needs a hard jolt)
+const int SENSITIVITY = 5; 
 
-// The internal threshold is scaled by the SENSITIVITY setting.
 // If you want even finer control, you can manually change these base values:
-const long ACCEL_THRESHOLD = 300 * SENSITIVITY;  
-const long GYRO_THRESHOLD = 200 * SENSITIVITY;   
+const long ACCEL_THRESHOLD = 500 * SENSITIVITY;  
+const long GYRO_THRESHOLD = 400 * SENSITIVITY;   
 
 // Enable DEBUG_MODE to print the raw movement delta values to the Serial Monitor/Plotter.
-// This helps you tune the base numbers by seeing exactly what numbers a "vibration" produces!
-// e.g. If table vibrations output 800, make sure your threshold calculates to > 800.
 const bool DEBUG_MODE = false;
 
 // ==========================================
 // ============ DEBOUNCING ==================
 // ==========================================
-// Debounce counter prevents the output from rapidly flickering
-// between Stationary and Moving due to minor sensor noise.
 int stationary_counter = 0;
-// Must be stationary for this many consecutive loops (5 loops * 50ms = 250ms) to trigger.
-// Increase this if it falsely detects "Stationary" in the middle of a continuous, but bumpy movement.
-const int STATIONARY_DEBOUNCE = 5;
+// Since walking produces cyclical bumps (meaning there are moments of zero acceleration 
+// between footsteps), we need a longer debounce to consider a bag/pocket "Stationary".
+// 20 loops * 50ms = 1 full second of NO movement before declaring it Stationary.
+const int STATIONARY_DEBOUNCE = 20;
 
-// Define LED_BUILTIN just in case it's missing on some board variants (like certain ESP32s).
-// Pin 2 is the most common onboard LED pin for ESP32/ESP8266. Teensy handles LED_BUILTIN automatically.
 #ifndef LED_BUILTIN
   #define LED_BUILTIN 2
 #endif
@@ -54,9 +53,7 @@ void readSensor() {
     ax = Wire.read() << 8 | Wire.read();
     ay = Wire.read() << 8 | Wire.read();
     az = Wire.read() << 8 | Wire.read();
-    
-    Wire.read(); Wire.read(); // Skip 2 bytes of temperature data
-    
+    Wire.read(); Wire.read(); // Skip temp
     gx = Wire.read() << 8 | Wire.read();
     gy = Wire.read() << 8 | Wire.read();
     gz = Wire.read() << 8 | Wire.read();
@@ -65,10 +62,8 @@ void readSensor() {
 
 void setup() {
   Serial.begin(115200);
-  
-  // Setup the onboard LED pin
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW); // Start with LED off
+  digitalWrite(LED_BUILTIN, LOW);
 
   while (!Serial && millis() < 5000) { delay(10); }
 
@@ -86,30 +81,42 @@ void setup() {
   Wire.write(0);
   Wire.endTransmission(true);
 
-  // Perform an initial read to populate the `prev_` variables
+  // Perform an initial read and set the baseline gravity
   readSensor();
-  prev_ax = ax; prev_ay = ay; prev_az = az;
-  prev_gx = gx; prev_gy = gy; prev_gz = gz;
+  grav_x = ax;
+  grav_y = ay;
+  grav_z = az;
 
-  Serial.println("Motion Detection Initialized.");
+  Serial.println("Pocket/Bag Motion Detection Initialized.");
 }
 
 void loop() {
   readSensor();
 
-  // Calculate the total absolute change in acceleration and gyroscope rotation
-  long accel_diff = abs(ax - prev_ax) + abs(ay - prev_ay) + abs(az - prev_az);
-  long gyro_diff = abs(gx - prev_gx) + abs(gy - prev_gy) + abs(gz - prev_gz);
+  // 1. Update the Low-Pass Filter to find where "Down" (gravity) currently is
+  // This smoothly absorbs rotations over time, so slowly turning it over won't be seen as a "spike".
+  grav_x = (grav_x * 0.9) + (ax * 0.1);
+  grav_y = (grav_y * 0.9) + (ay * 0.1);
+  grav_z = (grav_z * 0.9) + (az * 0.1);
+
+  // 2. Subtract gravity from the current reading to find only the Dynamic Acceleration (the jolt)
+  long dyn_x = abs(ax - (long)grav_x);
+  long dyn_y = abs(ay - (long)grav_y);
+  long dyn_z = abs(az - (long)grav_z);
+  long total_dyn_accel = dyn_x + dyn_y + dyn_z;
+
+  // 3. For gyroscope, we don't need a filter, just check the absolute magnitude of rotation rate
+  long total_gyro = abs(gx) + abs(gy) + abs(gz);
 
   if (DEBUG_MODE) {
-    Serial.print("Accel_Delta:"); Serial.print(accel_diff);
-    Serial.print("\tGyro_Delta:"); Serial.print(gyro_diff);
+    Serial.print("Dyn_Accel:"); Serial.print(total_dyn_accel);
+    Serial.print("\tGyro_Mag:"); Serial.print(total_gyro);
     Serial.print("\tAccel_Thresh:"); Serial.print(ACCEL_THRESHOLD);
     Serial.print("\tGyro_Thresh:"); Serial.println(GYRO_THRESHOLD);
   }
 
   // Check if the change exceeds our thresholds
-  bool isMoving = (accel_diff > ACCEL_THRESHOLD) || (gyro_diff > GYRO_THRESHOLD);
+  bool isMoving = (total_dyn_accel > ACCEL_THRESHOLD) || (total_gyro > GYRO_THRESHOLD);
 
   if (!DEBUG_MODE) {
     if (isMoving) {
@@ -125,16 +132,13 @@ void loop() {
          digitalWrite(LED_BUILTIN, HIGH); // Light up LED when truly stationary
          stationary_counter = STATIONARY_DEBOUNCE; // Prevent integer overflow
       } else {
-         // We are in the debounce period, print moving to be safe
+         // We are in the debounce period. Since we are tuning for a pocket/bag, 
+         // it's safer to assume it's still moving until it fully proves it's stationary.
          Serial.println("Moving"); 
          digitalWrite(LED_BUILTIN, LOW); 
       }
     }
   }
-
-  // Store the current values as previous for the next loop
-  prev_ax = ax; prev_ay = ay; prev_az = az;
-  prev_gx = gx; prev_gy = gy; prev_gz = gz;
 
   delay(50); // Sample at roughly 20Hz
 }
