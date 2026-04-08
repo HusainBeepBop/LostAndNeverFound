@@ -225,3 +225,48 @@ Moving
 Stationary
 Stationary
 ```
+
+## Tracker Main (Luggage Tracker)
+
+This is the primary firmware for the ESP32 luggage tracker. It integrates MPU6050 motion detection, GPS fix acquisition, SPIFFS offline storage, and an automated Wi-Fi upload system that syncs data with Firebase Realtime Database.
+
+### Supported Boards
+- ESP32 Dev Module 
+
+### Hardware Requirements
+- **ESP32 Dev Module** 
+- **MPU6050 IMU**
+- **NEO-M8N GPS Module**
+
+### Setup Instructions
+
+1. **Install Dependencies:**
+   - In the Arduino Library Manager, install **ArduinoJson** (version 6 or 7).
+
+2. **Wiring:**
+   - **GPS Module:**
+     - GPS TX → GPIO 16
+     - GPS GND → GND
+     - GPS VCC → GPIO 4 (Use this pin as power control for the GPS. Default HIGH when active, LOW when sleeping)
+   - **MPU6050 (I2C):**
+     - SCL → GPIO 22
+     - SDA → GPIO 21
+
+3. **Firebase Setup:**
+   - Go to the [Firebase Console](https://console.firebase.google.com/) and create a new project.
+   - On the left sidebar, click on **Build** -> **Realtime Database** and click **Create Database**.
+   - Start in **Test Mode** (or update rules to be read/write restricted based on requests).
+   - Once created, note your database URL format (e.g., `your-project-id-default-rtdb.firebaseio.com`).
+   - Go to **Project Settings** (gear icon) -> **Service accounts** -> **Database secrets**. Note down the "Secret" token.
+
+4. **Code Configuration:**
+   - Open `tracker_main/tracker_main.ino`
+   - Update `WIFI_SSID` and `WIFI_PASS` with your mobile hotspot or Wi-Fi.
+   - Update `FIREBASE_HOST` with your Firebase Realtime DB URL (exclude `https://` and trailing slash).
+   - Update `FIREBASE_AUTH` with your Database Secret.
+   - Set `DEVICE_ID` to uniquely identify this tracker snippet.
+
+### How it Works
+- **Storage:** If you are offline, it aggressively saves GPS fixes (up to a rolling 500 limit) to the internal SPIFFS memory.
+- **Motion Profiles:** MPU6050 triggers an aggressive ping profile (every 30s) while actively moving. When perfectly stationary, it pings sparsely (5 minutes interval) and forcefully kills GPS power.
+- **Uploads:** Once moving in range of a configured Wi-Fi channel, it connects securely (`WiFiClientSecure`), batches all unsent JSON rows, fires a `POST` directly to the Firebase Realtime DB, and updates local records as "sent".
