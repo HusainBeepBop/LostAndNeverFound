@@ -226,48 +226,235 @@ Stationary
 Stationary
 ```
 
-## Tracker Main (Luggage Tracker)
+## Tracker Main (Luggage Tracker Firmware)
 
-This is the primary firmware for the ESP32 luggage tracker. It integrates MPU6050 motion detection, GPS fix acquisition, SPIFFS offline storage, and an automated Wi-Fi upload system that syncs data with Firebase Realtime Database.
+This is the primary firmware for the ESP32 luggage tracker. It integrates MPU6050 motion detection, GPS fix acquisition, SPIFFS offline storage, and an automated Wi-Fi upload system that syncs data with Firebase Realtime Database. The system is designed to intelligently balance power consumption with tracking frequency based on motion.
+
+### Key Features
+- **Motion-Aware GPS Polling**: Use MPU6050 to gate GPS activation (stationary = 5min interval, moving = 30s)
+- **Offline Storage**: Up to 500 location records saved to SPIFFS when offline
+- **Firebase Sync**: Automatic POST to Firebase Realtime Database when WiFi is available
+- **LED Status Indicators**: 14+ different LED blink patterns for real-time status feedback
+- **Secure WiFi**: Uses TLS/SSL for secure uploads
+- **Low-Power Design**: Optional GPS power control via GPIO 4 transistor
 
 ### Supported Boards
-- ESP32 Dev Module 
+- **ESP32 Dev Module** (e.g., ESP32-WROOM-32D)
 
 ### Hardware Requirements
 - **ESP32 Dev Module** 
-- **MPU6050 IMU**
-- **NEO-M8N GPS Module**
+- **NEO-M8N GPS Module** (Quan-Sheng V2.0 tested)
+- **MPU6050 IMU** (6-axis accelerometer + gyroscope)
+- **Optional:** Transistor/MOSFET (2N7000, etc.) for GPS power control on GPIO 4
 
-### Setup Instructions
+### Wiring Diagram
 
-1. **Install Dependencies:**
-   - In the Arduino Library Manager, install **ArduinoJson** (version 6 or 7).
+**GPS Module (Serial2):**
+- GPS TX (GREEN) → GPIO 16 (RX2)
+- GPS GND (BLACK) → GND
+- GPS VCC (RED) → 5V or 3.3V
+- GPS RX (YELLOW) → Not connected (optional)
 
-2. **Wiring:**
-   - **GPS Module:**
-     - GPS TX → GPIO 16
-     - GPS GND → GND
-     - GPS VCC → GPIO 4 (Use this pin as power control for the GPS. Default HIGH when active, LOW when sleeping)
-   - **MPU6050 (I2C):**
-     - SCL → GPIO 22
-     - SDA → GPIO 21
+**GPS Power Control (Optional but Recommended):**
+- GPIO 4 → Gate of N-channel MOSFET 
+- MOSFET source → GND
+- MOSFET drain → GPS GND (or 5V pull-down via resistor)
+- When GPIO 4 = HIGH: GPS powered ON
+- When GPIO 4 = LOW: GPS powered OFF
 
-3. **Firebase Setup:**
-   - Go to the [Firebase Console](https://console.firebase.google.com/) and create a new project.
-   - On the left sidebar, click on **Build** -> **Realtime Database** and click **Create Database**.
-   - Start in **Test Mode** (or update rules to be read/write restricted based on requests).
-   - Once created, note your database URL format (e.g., `your-project-id-default-rtdb.firebaseio.com`).
-   - Go to **Project Settings** (gear icon) -> **Service accounts** -> **Database secrets**. Note down the "Secret" token.
+**MPU6050 (I2C):**
+- SCL → GPIO 22
+- SDA → GPIO 21
+- VCC → 3.3V
+- GND → GND
+- AD0 → GND (I2C address 0x68)
 
-4. **Code Configuration & Preferences:**
-   - Open `tracker_main/tracker_main.ino`
-   - **`SAVE_BATTERY_MODE`**: Set to `true` to smartly use the MPU6050 to heavily throttle GPS pings while completely stationary. Set to `false` to disable motion logic entirely and aggressively force GPS fetches and server updates every 30 seconds unconditionally.
-   - Update `WIFI_SSID` and `WIFI_PASS` with your mobile hotspot or Wi-Fi.
-   - Update `FIREBASE_HOST` with your Firebase Realtime DB URL (exclude `https://` and trailing slash).
-   - Update `FIREBASE_AUTH` with your Database Secret.
-   - Set `DEVICE_ID` to uniquely identify this tracker snippet.
+**LED (Built-in):**
+- GPIO 2 (already on board)
 
-### How it Works
-- **Storage:** If you are offline, it aggressively saves GPS fixes (up to a rolling 500 limit) to the internal SPIFFS memory.
-- **Motion Profiles:** If `SAVE_BATTERY_MODE` is enabled, the MPU6050 acts as a switch: when moving, the tracker updates every 30 seconds; when perfectly stationary, it updates remotely (every 5 minutes) and forcefully kills GPS power. If `SAVE_BATTERY_MODE` is set to `false`, it disregards motion entirely and always tracks/uploads every 30 seconds.
-- **Uploads:** Once in range of a configured Wi-Fi channel, it connects securely (`WiFiClientSecure`), batches all unsent JSON rows, fires a `POST` directly to the Firebase Realtime DB, and marks local records as "sent". The ESP32's built-in LED (GPIO 2) prominently lights up for 1 second upon every successful Wi-Fi upload array to give a clear verification cue.
+### Installation & Dependencies
+
+1. **Install ArduinoJson Library:**
+   - Open Arduino IDE → Sketch → Include Library → Manage Libraries
+   - Search for "ArduinoJson" by Benoit Blanchon
+   - Install version 6.x or 7.x
+
+2. **Install ESP32 Board Support:**
+   - Preferences → Additional Boards Manager URLs
+   - Add: `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
+   - Install ESP32 board package via Boards Manager
+
+3. **Select Board:**
+   - Board: **ESP32 Dev Module**
+   - Baud rate: **115200**
+
+### Configuration
+
+Edit the `CONFIG` section at the top of `tracker_main.ino`:
+
+```cpp
+// ===== CONFIG =====
+const bool SAVE_BATTERY_MODE = false;           // true = motion-gated GPS, false = GPS every 30s always
+const char* WIFI_SSID       = "YourSSID";       // Your WiFi network
+const char* WIFI_PASS       = "YourPassword";   // Your WiFi password
+const char* FIREBASE_HOST   = "your-db.firebaseio.com";  // Firebase Realtime DB URL
+const char* FIREBASE_AUTH   = "YourDatabaseSecret";      // Firebase database secret
+const char* DEVICE_ID       = "MASTER";         // Unique device identifier
+const int GPS_POWER_PIN     = 4;                // GPIO for GPS power control (optional)
+const int MPU_ADDR          = 0x68;             // MPU6050 I2C address
+const int SENSITIVITY       = 5;                // Motion sensitivity (1-10, 5=medium)
+const int MAX_RECORDS       = 500;              // Max records in SPIFFS before trimming
+```
+
+### Firebase Setup
+
+1. **Create a Firebase Project:**
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Create a new project
+   - Enable Realtime Database in **Build** → **Realtime Database**
+   - Start in **Test Mode** for development
+
+2. **Get Database Credentials:**
+   - Database URL: From **Realtime Database** page, copy the URL (without `https://` and `/`)
+   - Database Secret: Go to **Project Settings** → **Service Accounts** → **Database Secrets** → click the icon to copy the secret
+
+3. **Example Firebase JSON Structure:**
+```json
+{
+  "records": [
+    {
+      "ts": "2024-01-15T12:34:56Z",
+      "device_id": "MASTER",
+      "fix": true,
+      "moving": false,
+      "sats": 8,
+      "lat": 37.7749,
+      "lon": -122.4194,
+      "alt": 15.3,
+      "spd": 0.5,
+      "sent": true
+    }
+  ]
+}
+```
+
+### LED Blink Language
+
+The built-in LED (GPIO 2) communicates system status via different blink patterns:
+
+| Pattern | Meaning |
+|---------|---------|
+| 3 fast blinks | Boot successful |
+| 2 medium blinks | SPIFFS mount successful |
+| LED solid ON (2s) | SPIFFS mount **FAILED** |
+| Slow pulse (2s cycle) | GPS searching for fix |
+| 5 rapid blinks | GPS fix acquired! |
+| 2 long slow blinks | GPS failed (no fix after 60s) |
+| Rapid double-blinks | WiFi connecting... |
+| 5 fast blinks + 1 long ON | WiFi upload successful |
+| 3 slow blinks | WiFi failed (no connection) |
+| 1 short blink | Record saved to SPIFFS |
+| 1 tiny blip every 5s | Idle heartbeat (system alive) |
+
+### Operation Modes
+
+**Battery Mode OFF (`SAVE_BATTERY_MODE = false`):**
+- GPS acquisition every 30 seconds (constantly)
+- MPU6050 idle (skipped entirely)
+- WiFi upload cycle every 30 seconds
+- Best for active tracking, higher power draw
+
+**Battery Mode ON (`SAVE_BATTERY_MODE = true`):**
+- MPU6050 motion detection **enabled**
+- When **MOVING**: GPS every 30 seconds + upload every 30s
+- When **STATIONARY**: GPS every 5 minutes + put GPS to sleep (GPIO 4 LOW)
+- Best for battery life when item is stationary in a bag/luggage
+
+### Serial Monitor Output
+
+Example of a typical tracking cycle:
+
+```
+========================================
+  LostAndNeverFound - Tracker Firmware
+========================================
+  Device ID    : MASTER
+  Battery Mode : OFF (GPS every 30s)
+  Firebase     : your-db.firebaseio.com
+  WiFi SSID    : Google Pixel 8
+========================================
+
+[INIT ] Bluetooth stopped, WiFi off
+[INIT ] GPS power pin (GPIO 4) -> LOW
+[INIT ] Mounting SPIFFS...
+[INIT ] SPIFFS OK - 24 KB used / 1024 KB total
+[INIT ] Ready! First GPS fix in ~30s
+
+[LOOP ] Next GPS in 25s | moving=no | uptime=10s
+[LOOP ] ---- GPS cycle starting ----
+[GPS ] Powering GPS on...
+[GPS ] Searching for fix... (timeout 60s)
+[GPS ] Searching... 5s | sats=0 | fix=no
+[GPS ] Searching... 10s | sats=5 | fix=no
+[GPS ] Searching... 15s | sats=8 | fix=YES
+[GPS ] Fix acquired! lat=37.774900 lon=-122.419400 | sats=8 | alt=15.3m | spd=0.5kn
+[STORE] Record saved (FIX) -> 2024-01-15T12:34:56Z | sats=8 | moving=no
+[WIFI ] 1 unsent record(s). Connecting to "Google Pixel 8"...
+[WIFI ] Connected! IP: 192.168.1.100
+[WIFI ] POSTing to: https://your-db.firebaseio.com/history.json?auth=...
+[WIFI ] Sending 1 records (256 bytes)...
+[WIFI ] Upload OK! 1 records sent (HTTP 200)
+[WIFI ] WiFi off
+[LOOP ] ---- GPS cycle done ----
+
+[LOOP ] Next GPS in 30s | moving=no | uptime=45s
+```
+
+### Troubleshooting
+
+**"MPU6050 not found! Check SDA/SCL wiring"**
+- Verify GPIO 21 (SDA) and GPIO 22 (SCL) connections
+- Check for loose wires on the MPU6050 module
+- Try running `mpu6050_test.ino` to isolate the issue
+
+**"SPIFFS mount failed!"**
+- LED stays solid ON for 2 seconds
+- Flash the device with SPIFFS formatting enabled
+- In Arduino IDE: Tools → Erase All Flash Before Sketch Upload
+
+**"GPS not acquiring fix"**
+- Ensure GPS antenna is outdoors with clear sky view (30-90 seconds typical)
+- Check GPS TX (GREEN) is connected to GPIO 16
+- Run `gps_test.ino` to verify GPS communication separately
+- Check GPS baud rate (230400 is standard)
+
+**"WiFi connecting but not uploading"**
+- Verify WIFI_SSID and WIFI_PASS are correct
+- Check Firebase credentials (URL and database secret)
+- Ensure Firebase Realtime Database is in **Test Mode** (or update security rules)
+- Verify internet connection on the WiFi network
+
+**"Records accumulating, not uploading"**
+- Check WiFi SSID/password
+- Verify Firebase credentials
+- Wait 60+ seconds for first GPS fix (SPIFFS won't sync without at least one record)
+- Check serial monitor for HTTP error codes
+
+### Data Format (JSON Lines)
+
+Records stored in `/history.jsonl` (one JSON object per line):
+
+```json
+{"ts":"2024-01-15T12:34:56Z","fix":true,"moving":false,"sats":8,"sent":false,"lat":"37.7749","lon":"-122.4194","alt":15.3,"spd":0.5}
+{"ts":"2024-01-15T12:35:26Z","fix":true,"moving":false,"sats":8,"sent":true,"lat":"37.7749","lon":"-122.4194","alt":15.2,"spd":0.0}
+{"ts":"2024-01-15T12:36:00Z","fix":false,"moving":false,"sats":0,"sent":false,"lat":null,"lon":null,"alt":null,"spd":null}
+```
+
+- **ts**: ISO 8601 timestamp (from GPS) or "unknown@{millis}"
+- **fix**: Boolean - did GPS acquire a fix?
+- **moving**: Boolean - is the device moving (MPU6050 state)?
+- **sats**: Number of satellites locked
+- **sent**: Has this record been uploaded to Firebase?
+- **lat/lon**: Decimal degrees (null if no fix)
+- **alt**: Altitude in meters (null if no fix)
+- **spd**: Speed in knots (null if no fix)
