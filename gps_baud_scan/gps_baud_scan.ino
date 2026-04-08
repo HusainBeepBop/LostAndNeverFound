@@ -1,18 +1,14 @@
 /**
- * GPS Baud Rate Scanner — Teensy 4.0 or ESP32
- * Tries every common baud rate on Serial4 (Teensy pin 16) or Serial2 (ESP32 pins 16 RX, 17 TX)
+ * GPS Baud Rate Scanner — ESP32 Dev Module
+ * Tries every common baud rate on Serial2 (GPIO 16 RX, GPIO 17 TX)
  * and reports which one has valid UBX or NMEA data.
  *
  * Just flash and watch the serial monitor at 115200.
  */
 
-#ifdef ESP32
-HardwareSerial &gpsSerial = Serial2;
+// ESP32 Dev Module pin definitions
 const int GPS_RX_PIN = 16;
 const int GPS_TX_PIN = 17;
-#else // Teensy
-HardwareSerial &gpsSerial = Serial4;
-#endif
 
 const uint32_t bauds[] = { 4800, 9600, 19200, 38400, 57600, 115200, 230400 };
 const uint8_t NUM_BAUDS = sizeof(bauds) / sizeof(bauds[0]);
@@ -22,7 +18,7 @@ void setup() {
   delay(2000);
 
   Serial.println("\n==========================================");
-  Serial.println("  GPS Baud Rate Scanner — Serial4 (Teensy) or Serial2 (ESP32)");
+  Serial.println("  GPS Baud Rate Scanner — ESP32 Dev Module (Serial2)");
   Serial.println("==========================================\n");
 
   for (uint8_t i = 0; i < NUM_BAUDS; i++) {
@@ -30,9 +26,9 @@ void setup() {
     Serial.print("Trying "); Serial.print(baud); Serial.print(" ... ");
 
     // Try normal polarity
-    gpsSerial.begin(baud);
+    Serial2.begin(baud, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     delay(100);
-    while (gpsSerial.available()) gpsSerial.read(); // flush
+    while (Serial2.available()) Serial2.read(); // flush
     delay(1500); // collect 1.5 seconds of data
 
     uint32_t total = 0;
@@ -42,8 +38,8 @@ void setup() {
     uint8_t sample[32];
     uint8_t sample_len = 0;
 
-    while (gpsSerial.available()) {
-      uint8_t c = gpsSerial.read();
+    while (Serial2.available()) {
+      uint8_t c = Serial2.read();
       if (sample_len < 32) sample[sample_len++] = c;
       total++;
       if (c == 0xB5) prev_was_b5 = true;
@@ -51,7 +47,7 @@ void setup() {
       if (c == '$') nmea_dollars++;
     }
 
-    gpsSerial.end();
+    Serial2.end();
 
     Serial.print(total); Serial.print(" bytes, ");
     Serial.print(ubx_syncs); Serial.print(" UBX, ");
@@ -79,20 +75,16 @@ void setup() {
     }
 
     // Try inverted polarity
-    #ifdef ESP32
-    gpsSerial.begin(baud, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN, true);
-    #else
-    gpsSerial.begin(baud, SERIAL_8N1_RXINV);
-    #endif
+    Serial2.begin(baud, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN, true);
     delay(100);
-    while (gpsSerial.available()) gpsSerial.read();
+    while (Serial2.available()) Serial2.read();
     delay(1500);
 
     total = 0; ubx_syncs = 0; nmea_dollars = 0;
     prev_was_b5 = false; sample_len = 0;
 
-    while (gpsSerial.available()) {
-      uint8_t c = gpsSerial.read();
+    while (Serial2.available()) {
+      uint8_t c = Serial2.read();
       if (sample_len < 32) sample[sample_len++] = c;
       total++;
       if (c == 0xB5) prev_was_b5 = true;
@@ -100,7 +92,7 @@ void setup() {
       if (c == '$') nmea_dollars++;
     }
 
-    gpsSerial.end();
+    Serial2.end();
 
     if (total > 0) {
       Serial.print("  inv:  "); Serial.print(total); Serial.print(" bytes, ");
