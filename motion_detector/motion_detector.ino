@@ -1,6 +1,24 @@
+/**
+ * @file motion_detector.ino
+ * @brief Motion Detection for lost items using MPU6050 + ESP32 Dev Module
+ * 
+ * WIRING (MPU6050 to ESP32 Dev Module):
+ *   GND  → GND
+ *   VCC  → 3.3V
+ *   SDA  → GPIO 21 (I2C SDA)
+ *   SCL  → GPIO 22 (I2C SCL)
+ *   INT  → Not connected (optional)
+ *   AD0  → GND (sets I2C address to 0x68)
+ * 
+ * LED Output:
+ *   LED_BUILTIN (GPIO 2) → ON when stationary, OFF when moving
+ */
+
 #include <Wire.h>
 
 const int MPU_ADDR = 0x68; // Standard I2C address for MPU6050
+const int I2C_SDA = 21;
+const int I2C_SCL = 22;
 
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
@@ -39,9 +57,8 @@ int stationary_counter = 0;
 // 20 loops * 50ms = 1 full second of NO movement before declaring it Stationary.
 const int STATIONARY_DEBOUNCE = 20;
 
-#ifndef LED_BUILTIN
-  #define LED_BUILTIN 2
-#endif
+// ESP32 Dev Module built-in LED on GPIO 2
+const int LED_PIN = 2;
 
 void readSensor() {
   Wire.beginTransmission(MPU_ADDR);
@@ -62,12 +79,13 @@ void readSensor() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
 
   while (!Serial && millis() < 5000) { delay(10); }
 
-  Wire.begin();
+  // Initialize I2C for ESP32
+  Wire.begin(I2C_SDA, I2C_SCL);
   
   Wire.beginTransmission(MPU_ADDR);
   if (Wire.endTransmission() != 0) {
@@ -122,20 +140,20 @@ void loop() {
     if (isMoving) {
       stationary_counter = 0; // Reset debounce
       Serial.println("Moving");
-      digitalWrite(LED_BUILTIN, LOW); // Turn off LED when moving
+      digitalWrite(LED_PIN, LOW); // Turn off LED when moving
     } else {
       // We didn't detect movement this cycle, increment debounce counter
       stationary_counter++;
       
       if (stationary_counter >= STATIONARY_DEBOUNCE) {
          Serial.println("Stationary");
-         digitalWrite(LED_BUILTIN, HIGH); // Light up LED when truly stationary
+         digitalWrite(LED_PIN, HIGH); // Light up LED when truly stationary
          stationary_counter = STATIONARY_DEBOUNCE; // Prevent integer overflow
       } else {
          // We are in the debounce period. Since we are tuning for a pocket/bag, 
          // it's safer to assume it's still moving until it fully proves it's stationary.
          Serial.println("Moving"); 
-         digitalWrite(LED_BUILTIN, LOW); 
+         digitalWrite(LED_PIN, LOW); 
       }
     }
   }
