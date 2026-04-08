@@ -455,13 +455,15 @@ void setup() {
     Serial.println("SPIFFS Mount Failed");
   }
 
-  mpu_init();
+  if (SAVE_BATTERY_MODE) {
+    mpu_init();
+  }
 }
 
 // ===== LOOP =====
 void loop() {
   // 1. MPU Polling (runs every iteration of the delay-based loop)
-  if (millis() - last_mpu_poll >= current_loop_delay) {
+  if (SAVE_BATTERY_MODE && (millis() - last_mpu_poll >= current_loop_delay)) {
     mpu_read_and_process();
     last_mpu_poll = millis();
   }
