@@ -1,27 +1,37 @@
 # LostAndNeverFound
 
-A collection of utility projects for embedded systems and GPS modules.
+A collection of utility projects for embedded systems and GPS modules, optimized for **ESP32 Dev Module**.
 
 ## GPS Baud Rate Scanner
 
 This Arduino sketch scans common baud rates to determine the correct communication speed for a GPS module. It checks for valid UBX (u-blox binary) or NMEA (text) protocol data.
 
 ### Supported Boards
-- Teensy 4.0 (uses Serial4 on pin 16)
-- ESP32 (uses Serial2 on pins 16 RX, 17 TX)
+- ESP32 Dev Module (uses Serial2 on GPIO 16 RX, GPIO 17 TX)
 
 ### Hardware Requirements
-- Compatible microcontroller (Teensy 4.0 or ESP32)
-- GPS module connected to the specified serial pins
+- **ESP32 Dev Module** (e.g., ESP32-WROOM-32D)
+- GPS module (tested with NEO-M8N Quan-Sheng V2.0)
 - USB connection for serial monitor output
 
-### Usage
-1. Connect your GPS module to the appropriate pins:
-   - Teensy 4.0: GPS TX to pin 16
-   - ESP32: GPS TX to pin 16 (RX2)
-2. Flash the `gps_baud_scan.ino` sketch to your board
-3. Open the serial monitor at 115200 baud
-4. The sketch will automatically scan baud rates and report findings
+### Installation & Setup
+1. **Board Setup in Arduino IDE:**
+   - Install ESP32 board package: Go to Preferences → Additional Boards Manager URLs and add: `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
+   - Install the ESP32 board via Boards Manager
+   - Select Board: ESP32 Dev Module
+   - Set baud rate to 115200
+
+2. **Connect your GPS module to ESP32:**
+   - GPS TX (GREEN wire) → GPIO 16 (RX2)
+   - GPS RX (YELLOW wire) → Not connected (optional)
+   - GPS GND (BLACK wire) → GND
+   - GPS 5V (RED wire) → 5V or VIN
+   - Compass SCL (WHITE wire) → GPIO 22 (SCL)
+   - Compass SDA (ORANGE wire) → GPIO 21 (SDA)
+
+3. Flash the `gps_baud_scan.ino` sketch to your board
+4. Open the serial monitor at 115200 baud
+5. The sketch will automatically scan baud rates and report findings
 
 ### Baud Rates Tested
 - 4800
@@ -57,11 +67,10 @@ Trying 9600 ... 1245 bytes, 0 UBX, 12 NMEA  <<<< FOUND! [NMEA]
 This Arduino sketch provides a comprehensive GPS testing utility that parses both UBX binary and NMEA ASCII protocols. It displays real-time GPS data including position, speed, time, and satellite information.
 
 ### Supported Boards
-- Teensy 4.0 (uses Serial4 on pin 16, I2C on pins 18 SDA / 19 SCL)
-- ESP32 (uses Serial2 on pins 16 RX / 17 TX, I2C on pins 21 SDA / 22 SCL)
+- ESP32 Dev Module (uses Serial2 on GPIO 16 RX / GPIO 17 TX, I2C on GPIO 21 SDA / GPIO 22 SCL)
 
 ### Hardware Requirements
-- Compatible microcontroller (Teensy 4.0 or ESP32)
+- **ESP32 Dev Module** (e.g., ESP32-WROOM-32D)
 - GPS module (tested with NEO-M8N Quan-Sheng V2.0)
 - Optional: I2C IMU/compass module (MPU6050, QMC5883L, or HMC5883L)
 - USB connection for serial monitor output
@@ -69,27 +78,24 @@ This Arduino sketch provides a comprehensive GPS testing utility that parses bot
 ### Wiring
 Connect the GPS module using the 5-6 wire cable as follows:
 
-**Teensy 4.0:**
-- RED → 5V (VIN)
+**ESP32 Dev Module:**
+- RED → 5V or VIN (if GPS module is 5V-tolerant) OR 3.3V
 - BLACK/BROWN → GND
-- GREEN → Pin 16 (Serial4 RX) ← GPS TX
+- GREEN → GPIO 16 (Serial2 RX) ← GPS TX
 - YELLOW → Not connected (GPS RX - not needed)
-- WHITE → Pin 19 (SCL0) ← Compass/MPU6050 I2C SCL
-- ORANGE → Pin 18 (SDA0) ← Compass/MPU6050 I2C SDA
-
-**ESP32:**
-- RED → 5V or 3.3V
-- BLACK/BROWN → GND
-- GREEN → Pin 16 (Serial2 RX) ← GPS TX
-- YELLOW → Not connected (GPS RX - not needed)
-- WHITE → Pin 22 (SCL) ← Compass/MPU6050 I2C SCL
-- ORANGE → Pin 21 (SDA) ← Compass/MPU6050 I2C SDA
+- WHITE → GPIO 22 (SCL) ← Compass/MPU6050 I2C SCL
+- ORANGE → GPIO 21 (SDA) ← Compass/MPU6050 I2C SDA
 
 ### Usage
-1. Connect your GPS module according to the wiring above
-2. Flash the `gps_test.ino` sketch to your board
-3. Open the serial monitor at 115200 baud
-4. The sketch will automatically start parsing GPS data and display status every second
+1. **Board Setup in Arduino IDE:**
+   - Install ESP32 board package if not already done
+   - Select Board: **ESP32 Dev Module**
+   - Set baud rate to **115200**
+
+2. Connect your GPS module according to the wiring above
+3. Flash the `gps_test.ino` sketch to your board
+4. Open the serial monitor at **115200 baud**
+5. The sketch will automatically start parsing GPS data and display status every second
 
 ### Serial Commands
 - `d` - Toggle raw data dump (shows every byte received from GPS)
@@ -98,15 +104,12 @@ Connect the GPS module using the 5-6 wire cable as follows:
 
 ### GPS Data Displayed
 - Protocol detected (UBX or NMEA)
-- Fix status and type
-- Number of satellites
-- HDOP (Horizontal Dilution of Precision)
-- Latitude and Longitude
-- Altitude (MSL)
-- Speed (knots)
-- Course (degrees)
-- UTC Time and Date
-- Data age (milliseconds since last update)
+- Fix status and satellite count
+- HDOP (horizontal dilution of precision)
+- Latitude and longitude (if fixed)
+- Altitude, speed, and heading
+- UTC timestamp
+- Data age (ms since last update)
 
 ### Example Output
 ```

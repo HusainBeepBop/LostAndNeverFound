@@ -1,33 +1,22 @@
 /**
  * @file gps_test.ino
- * @brief Minimal GPS test — Teensy 4.0 or ESP32 + NEO-M8N (Quan-Sheng V2.0)
+ * @brief GPS Test for ESP32 Dev Module + NEO-M8N (Quan-Sheng V2.0)
  *
- * WIRING (5 or 6 wire cable):
+ * WIRING (5 or 6 wire cable for ESP32):
  *
- *   Teensy 4.0:
- *   Wire Color  →  Teensy 4.0
- *   ─────────────────────────────
- *   RED         →  5V (VIN)
- *   BLACK/BROWN →  GND
- *   GREEN       →  Pin 16  (Serial4 RX)   ← GPS TX confirmed working
- *   YELLOW      →  not connected           (GPS RX — we don't need it)
- *   WHITE       →  Pin 19  (SCL0)          ← compass I2C
- *   ORANGE      →  Pin 18  (SDA0)          ← compass I2C
- *
- *   ESP32:
- *   Wire Color  →  ESP32
- *   ─────────────────────────────
+ *   Wire Color  →  ESP32 Dev Module
+ *   ──────────────────────────────────
  *   RED         →  5V or 3.3V
  *   BLACK/BROWN →  GND
- *   GREEN       →  Pin 16  (Serial2 RX)   ← GPS TX
+ *   GREEN       →  GPIO 16 (Serial2 RX)   ← GPS TX
  *   YELLOW      →  not connected           (GPS RX — we don't need it)
- *   WHITE       →  Pin 22  (SCL)           ← compass I2C
- *   ORANGE      →  Pin 21  (SDA)           ← compass I2C
+ *   WHITE       →  GPIO 22 (SCL)           ← compass I2C
+ *   ORANGE      →  GPIO 21 (SDA)           ← compass I2C
  *
- *   If GREEN doesn't work, try YELLOW on the RX pin instead.
+ *   If GREEN doesn't work, try YELLOW on GPIO 16 instead.
  *
  * This sketch:
- *   1. Opens Serial4 (Teensy) or Serial2 (ESP32) at 230400 baud (adjust GPS_BAUD if needed)
+ *   1. Opens Serial2 at 230400 baud (adjust GPS_BAUD if needed)
  *   2. Feeds every byte into BOTH a UBX parser and an NMEA parser
  *   3. Prints parsed GPS data every second
  *   4. Also runs an I2C scan to find the onboard compass
@@ -42,17 +31,11 @@
 
 #define GPS_BAUD 230400
 
-#ifdef ESP32
-HardwareSerial &gpsSerial = Serial2;
+// ESP32 Dev Module pin definitions
 const int GPS_RX_PIN = 16;
 const int GPS_TX_PIN = 17;
 const int I2C_SDA = 21;
 const int I2C_SCL = 22;
-#else // Teensy
-HardwareSerial &gpsSerial = Serial4;
-const int I2C_SDA = 18;
-const int I2C_SCL = 19;
-#endif
 
 bool raw_dump  = false;
 bool nmea_dump = true;
@@ -226,7 +209,7 @@ void setup() {
   delay(2000);
 
   Serial.println("\n============================================");
-  Serial.println("  GPS Test — Teensy 4.0 or ESP32 + NEO-M8N");
+  Serial.println("  GPS Test — ESP32 Dev Module + NEO-M8N");
   Serial.println("  Auto-detects UBX binary or NMEA ASCII");
   Serial.println("============================================");
   Serial.println("  'd' = toggle raw byte dump");
@@ -241,7 +224,7 @@ void setup() {
   Wire.setClock(400000);
   i2c_scan();
 
-  gpsSerial.begin(GPS_BAUD);
+  Serial2.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   Serial.print("GPS serial open at "); Serial.print(GPS_BAUD); Serial.println(" baud. Waiting for GPS data...\n");
 }
 
@@ -261,8 +244,8 @@ void loop() {
   }
 
   // Read GPS
-  while (gpsSerial.available()) {
-    uint8_t c = gpsSerial.read();
+  while (Serial2.available()) {
+    uint8_t c = Serial2.read();
     byte_count++;
 
     if (raw_dump) {
