@@ -1,6 +1,21 @@
+/**
+ * @file mpu6050_test.ino
+ * @brief MPU6050 I2C test for ESP32 Dev Module
+ * 
+ * WIRING (MPU6050 to ESP32 Dev Module):
+ *   GND  → GND
+ *   VCC  → 3.3V
+ *   SDA  → GPIO 21 (I2C SDA)
+ *   SCL  → GPIO 22 (I2C SCL)
+ *   INT  → Not connected (optional)
+ *   AD0  → GND (sets I2C address to 0x68)
+ */
+
 #include <Wire.h>
 
 const int MPU_ADDR = 0x68; // I2C address of the MPU-6050. If AD0 pin is set to HIGH, the I2C address will be 0x69.
+const int I2C_SDA = 21;
+const int I2C_SCL = 22;
 
 int16_t accelerometer_x, accelerometer_y, accelerometer_z;
 int16_t gyro_x, gyro_y, gyro_z;
@@ -8,22 +23,23 @@ int16_t temperature;
 
 void setup() {
   Serial.begin(115200);
-  // Wait for Serial to be ready (useful for USB CDC on Teensy / ESP32-S2/S3)
+  // Wait for Serial to be ready (useful for USB CDC on ESP32)
   while (!Serial && millis() < 5000) {
     delay(10);
   }
   
-  // Initialize I2C bus
-  Wire.begin();
+  // Initialize I2C bus for ESP32
+  Wire.begin(I2C_SDA, I2C_SCL);
   
   // Verify connection
   Wire.beginTransmission(MPU_ADDR);
   byte error = Wire.endTransmission();
   
   if (error == 0) {
-    Serial.println("MPU6050 found.");
+    Serial.println("\nMPU6050 found!");
   } else {
-    Serial.println("MPU6050 not found! Check wiring.");
+    Serial.println("\nMPU6050 not found! Check wiring.");
+    Serial.println("ESP32 I2C pins: SDA=GPIO21, SCL=GPIO22");
     while (1) {
       delay(1000); // Halt if not found
     }

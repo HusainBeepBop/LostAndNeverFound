@@ -135,22 +135,90 @@ Age:  250 ms
 This Arduino sketch provides a simple, dependency-free utility to read accelerometer, gyroscope, and temperature data from an MPU6050 IMU sensor via the I2C protocol.
 
 ### Supported Boards
-- Teensy (e.g., Teensy 4.0 using pins 18 SDA / 19 SCL)
-- ESP32 / ESP8266 (using their default hardware I2C pins, typically 21 SDA / 22 SCL for ESP32)
+- ESP32 Dev Module (using I2C on GPIO 21 SDA / GPIO 22 SCL)
+
+### Hardware Requirements
+- **ESP32 Dev Module** (e.g., ESP32-WROOM-32D)
+- **MPU6050 IMU sensor module** (6-DOF accelerometer + gyroscope)
+- USB connection for serial monitor output
+
+### Wiring (MPU6050 to ESP32)
+- GND → GND
+- VCC → 3.3V
+- SDA → GPIO 21 (I2C SDA)
+- SCL → GPIO 22 (I2C SCL)
+- INT → Not connected (optional)
+- AD0 → GND (to use I2C address 0x68)
 
 ### Usage
-1. Connect the MPU6050 to the appropriate I2C pins for your microcontroller (VCC to 3.3V/5V, GND to GND, SDA to SDA, SCL to SCL).
-2. Flash the `mpu6050_test.ino` sketch.
-3. Open the serial monitor at 115200 baud.
-4. It will display raw accelerometer/gyroscope readings and formatted temperature in Celsius.
+1. **Board Setup in Arduino IDE:**
+   - Install ESP32 board package if not already done
+   - Select Board: **ESP32 Dev Module**
+   - Set baud rate to **115200**
+
+2. Connect the MPU6050 to the I2C pins as shown in the wiring section above
+3. Flash the `mpu6050_test.ino` sketch
+4. Open the serial monitor at 115200 baud
+5. It will display raw accelerometer/gyroscope readings and formatted temperature in Celsius
+
+### Output Format
+```
+Accel [X: 150  Y: -450  Z: 16200]  Temp: 29.5 C  Gyro [X: 5  Y: -2  Z: 1]
+```
 
 ## MPU6050 Motion Detector
 
-This Arduino sketch uses an MPU6050 IMU to robustly detect if it is "Stationary" or "Moving" (such as being carried in a bag or pocket). 
+This Arduino sketch uses an MPU6050 IMU to robustly detect if it is "Stationary" or "Moving" (such as being carried in a bag or pocket).
 
-### Details
+### Supported Boards
+- ESP32 Dev Module (using I2C on GPIO 21 SDA / GPIO 22 SCL, LED on GPIO 2)
+
+### Hardware Requirements
+- **ESP32 Dev Module** (e.g., ESP32-WROOM-32D)
+- **MPU6050 IMU sensor module** (6-DOF accelerometer + gyroscope)
+- USB connection for serial monitor output
+
+### Wiring (MPU6050 to ESP32)
+- GND → GND
+- VCC → 3.3V
+- SDA → GPIO 21 (I2C SDA)
+- SCL → GPIO 22 (I2C SCL)
+- INT → Not connected (optional)
+- AD0 → GND (to use I2C address 0x68)
+
+### LED Indicator
+- **GPIO 2 (Built-in LED)**: ON when stationary, OFF when moving
+
+### How It Works
 - **Dynamic Acceleration**: Uses a Low-Pass Filter on the accelerometer to map and subtract the baseline pull of gravity. This isolates purely dynamic "jolts" and ignores orientation changes (e.g., slowly turning the sensor over).
 - **Absolute Rotation**: Uses raw Gyroscope magnitude to detect physical spinning or swinging motions.
 - **Walking-Optimized Debounce**: Uses a full 1-second debounce window to prevent cyclical walking movements from accidentally triggering a "Stationary" reading mid-step.
 - **Easy Sensitivity Control**: Includes a simple 1-10 `SENSITIVITY` scale for quickly dialing in the detection threshold.
-- Turns the microcontroller's `LED_BUILTIN` **ON** when stationary, and **OFF** when moving.
+
+### Configuration
+Edit these constants in the sketch to adjust behavior:
+```cpp
+const int SENSITIVITY = 5;           // 1-10 scale (5 = medium)
+const bool DEBUG_MODE = false;       // Set to true to see raw values
+const int STATIONARY_DEBOUNCE = 20;  // Cycles of no motion before "Stationary"
+```
+
+### Usage
+1. **Board Setup in Arduino IDE:**
+   - Install ESP32 board package if not already done
+   - Select Board: **ESP32 Dev Module**
+   - Set baud rate to **115200**
+
+2. Connect the MPU6050 to the I2C pins as shown in the wiring section above
+3. Flash the `motion_detector.ino` sketch
+4. Open the serial monitor at 115200 baud
+5. Watch the output: "Moving" or "Stationary"
+6. The built-in LED (GPIO 2) will light up when truly stationary
+
+### Output Example
+```
+Moving
+Moving
+Stationary
+Stationary
+```
