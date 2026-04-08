@@ -9,16 +9,19 @@
 #include <ArduinoJson.h>
 
 // ===== CONFIG =====
-const char* WIFI_SSID = "YOUR_SSID";
-const char* WIFI_PASS = "YOUR_PASSWORD";
-const char* FIREBASE_HOST = "your-project-id.firebaseio.com"; // Without https:// and trailing /
-const char* FIREBASE_AUTH = "YOUR_DATABASE_SECRET"; // Find in Firebase -> Project Settings -> Service accounts -> Database secrets
-const char* DEVICE_ID = "BAG01";
+const bool SAVE_BATTERY_MODE = false; // Set to false to force GPS / Server updates every 30 seconds
+
+const char* WIFI_SSID = "Google Pixel 8";
+const char* WIFI_PASS = "easyentry";
+const char* FIREBASE_HOST = "lostandneverfound-18437-default-rtdb.firebaseio.com"; // Without https:// and trailing /
+const char* FIREBASE_AUTH = "lostandneverfound-4bf46.firebaseapp.com"; // Find in Firebase -> Project Settings -> Service accounts -> Database secrets
+const char* DEVICE_ID = "MASTER";
 
 const int GPS_RX_PIN = 16;
 const int GPS_TX_PIN = 17;
 #define GPS_BAUD 230400
 #define GPS_POWER_PIN 4 // Optional: HIGH = GPS on, LOW = GPS off
+#define LED_PIN 2       // Built-in LED on ESP32 Dev Module
 
 const int MPU_ADDR = 0x68;
 const int I2C_SDA = 21;
@@ -125,7 +128,7 @@ void mpu_read_and_process() {
     } else {
       Serial.println("[MOTION] Stationary");
       current_loop_delay = 2000;
-      current_gps_interval = 300000;
+      current_gps_interval = SAVE_BATTERY_MODE ? 300000 : 30000;
     }
   }
 }
@@ -411,6 +414,11 @@ void attempt_wifi_upload() {
 
     if (httpResponseCode == 200) {
       Serial.printf("[WIFI] Upload OK (%d records sent)\n", count);
+      // Blink LED on success
+      digitalWrite(LED_PIN, HIGH);
+      delay(1000);
+      digitalWrite(LED_PIN, LOW);
+      
       mark_records_as_sent();
     } else {
       Serial.println("[WIFI] Upload failed");
@@ -429,12 +437,19 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW); // LED off initially
+
   // Power off BT since not used
   btStop();
   WiFi.mode(WIFI_OFF);
 
   pinMode(GPS_POWER_PIN, OUTPUT);
   digitalWrite(GPS_POWER_PIN, LOW); // GPS off initially
+
+  if (!SAVE_BATTERY_MODE) {
+    current_gps_interval = 30000;
+  }
 
   if (!SPIFFS.begin(true)) {
     Serial.println("SPIFFS Mount Failed");
@@ -455,16 +470,19 @@ void loop() {
   if (millis() - last_gps_fix_attempt >= current_gps_interval) {
     bool got_fix = attempt_gps_fix();
     
-    // Shut off GPS if we are stationary
-    if (!is_moving) {
+    // Shut off GPS if we are stationary AND battery saving is enabled
+    if (!is_moving && SAVE_BATTERY_MODE) {
       digitalWrite(GPS_POWER_PIN, LOW);
       Serial2.end();
     }
     
     if (got_fix) {
       save_record();
-      attempt_wifi_upload();
     }
+    
+    // Always attempt Wi-Fi upload, in case we have unsent records 
+    // even if we couldn't get a new GPS lock this time.
+    attempt_wifi_upload();
     
     last_gps_fix_attempt = millis();
   }

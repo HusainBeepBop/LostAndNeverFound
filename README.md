@@ -259,8 +259,9 @@ This is the primary firmware for the ESP32 luggage tracker. It integrates MPU605
    - Once created, note your database URL format (e.g., `your-project-id-default-rtdb.firebaseio.com`).
    - Go to **Project Settings** (gear icon) -> **Service accounts** -> **Database secrets**. Note down the "Secret" token.
 
-4. **Code Configuration:**
+4. **Code Configuration & Preferences:**
    - Open `tracker_main/tracker_main.ino`
+   - **`SAVE_BATTERY_MODE`**: Set to `true` to smartly use the MPU6050 to heavily throttle GPS pings while completely stationary. Set to `false` to disable motion logic entirely and aggressively force GPS fetches and server updates every 30 seconds unconditionally.
    - Update `WIFI_SSID` and `WIFI_PASS` with your mobile hotspot or Wi-Fi.
    - Update `FIREBASE_HOST` with your Firebase Realtime DB URL (exclude `https://` and trailing slash).
    - Update `FIREBASE_AUTH` with your Database Secret.
@@ -268,5 +269,5 @@ This is the primary firmware for the ESP32 luggage tracker. It integrates MPU605
 
 ### How it Works
 - **Storage:** If you are offline, it aggressively saves GPS fixes (up to a rolling 500 limit) to the internal SPIFFS memory.
-- **Motion Profiles:** MPU6050 triggers an aggressive ping profile (every 30s) while actively moving. When perfectly stationary, it pings sparsely (5 minutes interval) and forcefully kills GPS power.
-- **Uploads:** Once moving in range of a configured Wi-Fi channel, it connects securely (`WiFiClientSecure`), batches all unsent JSON rows, fires a `POST` directly to the Firebase Realtime DB, and updates local records as "sent".
+- **Motion Profiles:** If `SAVE_BATTERY_MODE` is enabled, the MPU6050 acts as a switch: when moving, the tracker updates every 30 seconds; when perfectly stationary, it updates remotely (every 5 minutes) and forcefully kills GPS power. If `SAVE_BATTERY_MODE` is set to `false`, it disregards motion entirely and always tracks/uploads every 30 seconds.
+- **Uploads:** Once in range of a configured Wi-Fi channel, it connects securely (`WiFiClientSecure`), batches all unsent JSON rows, fires a `POST` directly to the Firebase Realtime DB, and marks local records as "sent". The ESP32's built-in LED (GPIO 2) prominently lights up for 1 second upon every successful Wi-Fi upload array to give a clear verification cue.
