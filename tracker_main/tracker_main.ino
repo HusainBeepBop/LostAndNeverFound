@@ -24,15 +24,18 @@
 #include <HTTPClient.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
+#include <BLEDevice.h>
+#include <BLEAdvertising.h>
 
 // ===== CONFIG =====
 const bool SAVE_BATTERY_MODE = false; // false = GPS every 30s regardless of motion
 
 const char* WIFI_SSID       = "Google Pixel 8";
 const char* WIFI_PASS       = "easyentry";
-const char* FIREBASE_HOST   = "lostandneverfound-4bf46-default-rtdb.firebaseio.com";
+const char* FIREBASE_HOST   = "lostandneverfound-18437-default-rtdb.firebaseio.com";
 const char* FIREBASE_AUTH   = "13EhYvgUxOAGsPXTgTWk4O77xB2QzfuzvhS3K4Bp";
 const char* DEVICE_ID       = "MASTER";
+const char* BLE_BEACON_NAME = "LNF-MASTER"; // Checkpoint scans for this name
 
 const int GPS_RX_PIN = 16;
 const int GPS_TX_PIN = 17;
@@ -566,9 +569,19 @@ void setup() {
 
   led_blink(3, 100, 100); // 3 fast blinks = boot OK
 
-  btStop();
+  // ===== BLE ADVERTISING =====
+  // We advertise continuously so the checkpoint ESP32 can detect us.
+  // btStop() is NOT called here — BLE needs the BT radio.
+  Serial.printf("[INIT ] Starting BLE advertising as \"%s\"...\n", BLE_BEACON_NAME);
+  BLEDevice::init(BLE_BEACON_NAME);
+  BLEAdvertising* pAdv = BLEDevice::getAdvertising();
+  pAdv->setScanResponse(true);
+  pAdv->setMinPreferred(0x06);
+  BLEDevice::startAdvertising();
+  Serial.println("[INIT ] BLE advertising started");
+
   WiFi.mode(WIFI_OFF);
-  Serial.println("[INIT ] Bluetooth stopped, WiFi off");
+  Serial.println("[INIT ] WiFi off");;
 
   pinMode(GPS_POWER_PIN, OUTPUT);
   digitalWrite(GPS_POWER_PIN, LOW);
