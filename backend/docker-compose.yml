@@ -1,0 +1,45 @@
+# ============================================================
+#  Macless-Haystack Backend
+#  Fetches Apple Find My location reports without a Mac
+#
+#  SETUP:
+#    1. Install Docker Desktop for Windows
+#    2. Copy your PREFIX_devices.json into ./data/
+#    3. Set your Apple ID credentials below (app-specific password recommended)
+#    4. Run:  docker compose up -d
+#    5. Open: http://localhost:6176
+#
+#  The anisette server provides Apple 2FA/authentication tokens.
+#  The macless-haystack server fetches location reports from Apple.
+# ============================================================
+
+services:
+  anisette:
+    image: dadoum/anisette-v3-server:latest
+    container_name: lnf-anisette
+    ports:
+      - "6969:6969"
+    restart: unless-stopped
+    volumes:
+      - anisette_data:/home/Alcoholic/.config/anisette-v3
+
+  macless-haystack:
+    image: christld/macless-haystack:latest
+    container_name: lnf-haystack
+    ports:
+      - "6176:6176"
+    depends_on:
+      - anisette
+    environment:
+      # --- EDIT THESE ---
+      - ANISETTE_URL=http://anisette:6969
+      - APPLE_MAIL=your_apple_id@icloud.com
+      - APPLE_PASS=your-app-specific-password
+      # Create an app-specific password at https://appleid.apple.com
+      # (Apple ID > Sign-In and Security > App-Specific Passwords)
+    volumes:
+      - ./data:/app/endpoint/data
+    restart: unless-stopped
+
+volumes:
+  anisette_data:
