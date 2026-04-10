@@ -26,7 +26,7 @@
 #include <ArduinoJson.h>
 
 // ===== CONFIG =====
-const bool SAVE_BATTERY_MODE = false; // false = GPS every 30s regardless of motion
+const bool SAVE_BATTERY_MODE = true; // false = GPS every 30s regardless of motion
 
 const char* WIFI_SSID       = "Google Pixel 8";
 const char* WIFI_PASS       = "easyentry";
