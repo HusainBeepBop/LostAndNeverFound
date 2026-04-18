@@ -29,7 +29,7 @@ To experience the full visual "Hot or Cold" tracking system, you should utilize 
 ### Step A: Configure and Flash the Firmware (`ble_beacon.ino`)
 1.  Open `ble_beacon/ble_beacon.ino` in your Arduino IDE.
 2.  Ensure you have the latest **ESP32 Board Definitions (Core 3.x or higher)** installed.
-3.  **Rename your Tag:** Look for the `#define TAG_NAME` macro near the top of the file. Change it to a unique identifier for your physical tag (e.g., `#define TAG_NAME "Husain-Wallet"`).
+3.  **Rename your Tag:** Look for the `#define TAG_NAME` macro near the top of the file. Change it to a unique identifier for your physical tag (e.g., `#define TAG_NAME "Aastha-Wallet"`).
 4.  Select your board (**ESP32 Dev Module**) and flash the sketch. The tag will boot and immediately begin broadcasting wirelessly. 
 5.  *(Optional)* Repeat this step for additional ESP32 modules, giving each a unique `TAG_NAME`.
 
@@ -38,10 +38,10 @@ To experience the full visual "Hot or Cold" tracking system, you should utilize 
 2.  **Register your Tags:** Locate the `KNOWN_TAGS` python dictionary near the top. Ensure the active dictionary keys exactly match the `TAG_NAME` values you flashed onto your ESP32 boards. The dictionary values dictate what is shown on the UI:
     ```python
     KNOWN_TAGS = {
-        "Husain-Bag":       "Main Bag",
-        "Husain-Backpack":  "Backpack",
-        "Husain-Case":      "Laptop Case",
-        "Husain-Wallet":    "Wallet",
+        "Aastha-Bag":       "Main Bag",
+        "Aastha-Backpack":  "Backpack",
+        "Aastha-Case":      "Laptop Case",
+        "Aastha-Wallet":    "Wallet",
     }
     ```
 
