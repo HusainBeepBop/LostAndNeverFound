@@ -26,10 +26,10 @@ TRACKER_SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b".lower()
 # Known tags whitelist. Key = TAG_NAME in firmware, Value = display label.
 # Only devices in this list will be shown. Others are silently ignored.
 KNOWN_TAGS = {
-    "Husain-Bag":       "Main Bag",
-    "Husain-Backpack":  "Backpack",
-    "Husain-Case":      "Laptop Case",
-    "Husain-Wallet":    "Wallet",
+    "Aastha-Bag":       "Main Bag",
+    "Aastha-Backpack":  "Backpack",
+    "Aastha-Case":      "Laptop Case",
+    "Aastha-Wallet":    "Wallet",
 }
 
 # EMA smoothing: lower α → smoother (slower), higher → noisier (faster)

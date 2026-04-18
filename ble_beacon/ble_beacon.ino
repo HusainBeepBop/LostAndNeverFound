@@ -27,11 +27,11 @@
 #include <BLEAdvertising.h>
 
 // --- TAG IDENTITY (change this per physical tag) ---
-#define TAG_NAME "Husain-Bag"
+#define TAG_NAME "Aastha-Bag"
 // Examples for other tags:
-//   "Husain-Backpack"
-//   "Husain-Case"
-//   "Husain-Wallet"
+//   "Aastha-Backpack"
+//   "Aastha-Case"
+//   "Aastha-Wallet"
 
 // Shared service UUID — identifies all your tags to the app.
 // Must match TRACKER_SERVICE_UUID in python_tracker.py exactly.
