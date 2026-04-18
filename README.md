@@ -11,49 +11,51 @@ The project is split into two primary components:
 
 ---
 
-## 1. ESP32 BLE Beacon (`/ble_beacon`)
+## 1. Project Structure: Development vs. Demonstration
 
-The firmware converts a standard ESP32 module into a localized tracking beacon. It broadcasts a unique Service UUID while utilizing standard iBeacon data payloads to ensure clean visibility.
+The project is organized into two distinct pairs of files to separate raw debugging from the polished, multi-tag tracking system.
 
-### Hardware Requirements
-*   **ESP32 Dev Module** (tested with ESP32-WROOM-32D)
-*   Micro-USB or USB-C cable for power/programming.
-
-### Installation & Flashing
-1.  Open the `ble_beacon/ble_beacon.ino` sketch in your Arduino IDE.
-2.  Ensure you have the latest **ESP32 Board Definitions (Core 3.x or higher)** installed via the Boards Manager. (Note: earlier versions rely on `std::string`, whereas the modern core integrates Arduino `String` into the BLE Libraries).
-3.  Select **ESP32 Dev Module** and set your COM Port.
-4.  Upload the sketch.
-5.  Upon successful boot, the built-in LED (GPIO 2) will flash once. The beacon will immediately begin anonymously blasting its UUID (`4fafc201-1fb5-459e-8fcc-c5c9c331914b`) into the surrounding area.
+*   **Development Pair:** `ble_test.ino` & `python_tracker_ble.py`
+    *(Use these files for raw signal testing, calibration, and single-tag debugging).*
+*   **Demonstration Pair (RECOMMENDED):** `ble_beacon.ino` & `python_tracker_beacon.py`
+    *(Use these files to run the polished tracking interface. This pair supports simultaneously tracking multiple unique tags and filters out unrecognized devices).*
 
 ---
 
-## 2. Python BLE Desktop Tracker
+## 2. Running the Demonstration
 
-The software component (`python_tracker_ble.py`) is an elegant desktop utility that parses raw BLE RSSI (Received Signal Strength Indicator) values from the surrounding environment and maps them into a fluid "Hot or Cold" graphical interface.
+To experience the full visual "Hot or Cold" tracking system, you should utilize the **Demonstration Pair**.
 
-### Key Features
-*   **Real-time Triangulation:** Captures dBm strength to approximate distance.
-*   **Dynamic Gradient Animations:** The Flet-powered UI dynamically changes background colors based on signal strength:
-    *   🔵 **Freezing** (<-80 dBm): Distant signal.
-    *   🟠 **Getting Warmer** (-80 to -60 dBm): Approaching the item.
-    *   🔴 **Burning Hot!** (>-60 dBm): Right on top of the item.
-*   **Async Asynchronous Backend:** Flet's UI thread and Bleak's device scanner work concurrently via Python `asyncio`.
-*   **Lost Device Watchdog:** Automatically reverts to a continuous scanning state if the beacon signal vanishes for more than 3 seconds.
+### Step A: Configure and Flash the Firmware (`ble_beacon.ino`)
+1.  Open `ble_beacon/ble_beacon.ino` in your Arduino IDE.
+2.  Ensure you have the latest **ESP32 Board Definitions (Core 3.x or higher)** installed.
+3.  **Rename your Tag:** Look for the `#define TAG_NAME` macro near the top of the file. Change it to a unique identifier for your physical tag (e.g., `#define TAG_NAME "Husain-Wallet"`).
+4.  Select your board (**ESP32 Dev Module**) and flash the sketch. The tag will boot and immediately begin broadcasting wirelessly. 
+5.  *(Optional)* Repeat this step for additional ESP32 modules, giving each a unique `TAG_NAME`.
 
-### Setup & Usage
+### Step B: Configure the Tracker App (`python_tracker_beacon.py`)
+1.  Open `python_tracker_beacon.py` in your code editor.
+2.  **Register your Tags:** Locate the `KNOWN_TAGS` python dictionary near the top. Ensure the active dictionary keys exactly match the `TAG_NAME` values you flashed onto your ESP32 boards. The dictionary values dictate what is shown on the UI:
+    ```python
+    KNOWN_TAGS = {
+        "Husain-Bag":       "Main Bag",
+        "Husain-Backpack":  "Backpack",
+        "Husain-Case":      "Laptop Case",
+        "Husain-Wallet":    "Wallet",
+    }
+    ```
 
-1.  Make sure Python 3.8+ is installed on your machine.
-2.  Install all required dependencies using the included `requirements.txt` file (ideally in a `venv`):
+### Step C: Run and Demonstrate
+1.  Ensure your computer's Bluetooth hardware is turned on.
+2.  If this is your first time, install the required dependencies (ideally in a `venv`):
     ```bash
     pip install -r requirements.txt
     ```
-    *Core dependencies include `flet`, `bleak`, and Windows/BLE extensions where applicable.*
-3.  Ensure your OS's Bluetooth hardware is activated.
-4.  Run the interface:
+3.  Launch the tracker application:
     ```bash
-    python python_tracker_ble.py
+    python python_tracker_beacon.py
     ```
+4.  **Demonstrate:** The Flet desktop UI will seamlessly render. Move your ESP32 module closer or further away from your computer to watch the user interface fluidly transition gradients based on the live RSSI strength! Use the pill buttons at the bottom of the app to switch tracking context between different registered tags.
 
 ---
 

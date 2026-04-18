@@ -1,60 +1,94 @@
+// ============================================================
+//  BLE Proximity Tag — ESP32 Firmware
+//  Works with python_tracker.py (Flet + Bleak)
+//
+//  SETUP FOR EACH PHYSICAL TAG:
+//    1. Change TAG_NAME to a unique value (must match a key
+//       in the KNOWN_TAGS dict inside python_tracker.py)
+//    2. Flash. Done.
+//
+//  SIGNAL CALIBRATION NOTES:
+//    - TX power is set to max (+9 dBm) for best range.
+//    - Zone thresholds are tuned in python_tracker.py → ZONES.
+//    - To calibrate: hold the tag at a known distance, read the
+//      smoothed dBm value in the app, then update the thresholds.
+//    - Typical real-world readings (varies with walls/body):
+//        ~0.5 m  → -45 to -55 dBm  (Very Near)
+//        ~1-2 m  → -55 to -65 dBm  (Near)
+//        ~3-4 m  → -65 to -73 dBm  (Fairly Near)
+//        ~5-8 m  → -73 to -82 dBm  (Far)
+//        >8 m    → < -82 dBm       (Very Far)
+//    - Advertising interval is set to ~100ms for snappy updates.
+//      Increase ADV_INTERVAL_MIN/MAX to save battery.
+// ============================================================
+
 #include <BLEDevice.h>
 #include <BLEUtils.h>
-#include <BLEBeacon.h>
+#include <BLEAdvertising.h>
 
-#define GPIO_DEEP_SLEEP_DURATION 10 // Sleep duration in seconds (optional for later)
-#define Led_pin 2
+// --- TAG IDENTITY (change this per physical tag) ---
+#define TAG_NAME "Husain-Bag"
+// Examples for other tags:
+//   "Husain-Backpack"
+//   "Husain-Case"
+//   "Husain-Wallet"
 
-// Unique UUID for your tracker (kept from your original code)
-#define DEVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+// Shared service UUID — identifies all your tags to the app.
+// Must match TRACKER_SERVICE_UUID in python_tracker.py exactly.
+#define TRACKER_SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+
+#define LED_PIN 2
+
+// Advertising interval in units of 0.625 ms
+// 160 × 0.625 = 100 ms | 200 × 0.625 = 125 ms
+#define ADV_INTERVAL_MIN 160
+#define ADV_INTERVAL_MAX 200
 
 void setup() {
   Serial.begin(115200);
-  pinMode(Led_pin, OUTPUT);
-  Serial.println("Starting iBeacon Tracker Mode...");
+  pinMode(LED_PIN, OUTPUT);
+  Serial.printf("\n[TAG] Initializing: %s\n", TAG_NAME);
 
-  // 1. Initialize the BLE Hardware
-  BLEDevice::init("ESP32_Tracker");
+  // --- BLE Stack Init ---
+  BLEDevice::init(TAG_NAME);
 
-  // 2. Create the Beacon Object
-  BLEBeacon oBeacon = BLEBeacon();
-  oBeacon.setManufacturerId(0x4C00); // Fake Apple's ID to ensure standard iBeacon compatibility
-  oBeacon.setProximityUUID(BLEUUID(DEVICE_UUID));
-  
-  // Major and Minor can be used to identify different bags
-  oBeacon.setMajor(0x01); 
-  oBeacon.setMinor(0x01);
-  
-  // Signal strength at 1 meter (Used by your Expo app for distance math)
-  // You may need to tune this value (-59 is a standard baseline)
-  oBeacon.setSignalPower(-59);
+  // Maximum TX power for best RSSI consistency at range.
+  // Drop to ESP_PWR_LVL_N0 (0 dBm) if you want battery savings.
+  BLEDevice::setPower(ESP_PWR_LVL_P9);
 
-  // 3. Create the Advertising Data
-  BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
-  oAdvertisementData.setFlags(0x04); // BR_EDR_NOT_SUPPORTED 
-  
-  String strServiceData = "";
-  strServiceData += (char)26;     // Length
-  strServiceData += (char)0xFF;   // Type
-  strServiceData += oBeacon.getData(); 
-  oAdvertisementData.addData(strServiceData);
+  BLEAdvertising *pAdv = BLEDevice::getAdvertising();
 
-  // 4. Start Advertising
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->setAdvertisementData(oAdvertisementData);
-  pAdvertising->setScanResponse(true);
-  pAdvertising->start();
+  // Primary advertisement packet:
+  // Flags + Service UUID — this is what BleakScanner filters on.
+  BLEAdvertisementData advData;
+  advData.setFlags(0x06); // LE General Discoverable | No BR/EDR
+  advData.setPartialServices(BLEUUID(TRACKER_SERVICE_UUID));
+  pAdv->setAdvertisementData(advData);
 
-  Serial.println("Beacon is broadcasting! Use nRF Connect or your Expo app to see RSSI.");
-  
-  // Visual indicator that beacon is active
-  digitalWrite(Led_pin, HIGH);
-  delay(500);
-  digitalWrite(Led_pin, LOW);
+  // Scan response packet:
+  // Full device name — this is what the app uses to tell tags apart.
+  // BleakScanner requests this via active scan automatically.
+  BLEAdvertisementData scanResp;
+  scanResp.setName(TAG_NAME);
+  pAdv->setScanResponseData(scanResp);
+
+  pAdv->setMinInterval(ADV_INTERVAL_MIN);
+  pAdv->setMaxInterval(ADV_INTERVAL_MAX);
+  pAdv->start();
+
+  Serial.println("[TAG] Advertising started. Visible to python_tracker.py");
+
+  // 3 quick blinks = boot success
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(LED_PIN, HIGH); delay(80);
+    digitalWrite(LED_PIN, LOW);  delay(80);
+  }
 }
 
 void loop() {
-  // In pure beacon mode, we don't need code in the loop.
-  // The radio hardware handles the broadcasting in the background.
-  delay(5000); 
+  // BLE radio handles advertising autonomously.
+  // Heartbeat blink every 5 s confirms the tag is alive.
+  delay(5000);
+  digitalWrite(LED_PIN, HIGH); delay(40);
+  digitalWrite(LED_PIN, LOW);
 }
