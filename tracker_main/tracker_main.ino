@@ -1,4 +1,5 @@
 // LostAndNeverFound - ESP32 Luggage Tracker
+// Apple Find My integration via Macless-Haystack
 // TODO: Replace delay-based idle with ESP32 light sleep in v2 for better battery life
 // Requirements: ArduinoJson library (install via Arduino Library Manager)
 //
@@ -16,6 +17,8 @@
 //  WIFI FAIL/NOCON : 3 slow blinks
 //  SAVED TO SPIFFS : 1 short blink
 //  IDLE HEARTBEAT  : 1 tiny blip every 5s
+//  BLE FIND MY ON  : 4 rapid blinks (at boot)
+//  BLE KEY MISSING : LED solid 3s (warning)
 // ============================================================
 
 #include <Wire.h>
@@ -25,14 +28,23 @@
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
 
+// BLE: Arduino library for stack init + ESP-IDF for raw advertisement
+#include <BLEDevice.h>
+#include "esp_gap_ble_api.h"
+
+// Find My public key (28 bytes) — replace with your generated key
+#include "findmy_key.h"
+
 // ===== CONFIG =====
 const bool SAVE_BATTERY_MODE = false; // false = GPS every 30s regardless of motion
+const bool FINDMY_ENABLED    = true;  // true = Apple Find My BLE, false = classic named beacon
 
 const char* WIFI_SSID       = "Google Pixel 8";
 const char* WIFI_PASS       = "easyentry";
-const char* FIREBASE_HOST   = "lostandneverfound-4bf46-default-rtdb.firebaseio.com";
+const char* FIREBASE_HOST   = "lostandneverfound-18437-default-rtdb.firebaseio.com";
 const char* FIREBASE_AUTH   = "13EhYvgUxOAGsPXTgTWk4O77xB2QzfuzvhS3K4Bp";
 const char* DEVICE_ID       = "MASTER";
+const char* BLE_BEACON_NAME = "LNF-MASTER"; // Used in classic mode and checkpoint scan
 
 const int GPS_RX_PIN = 16;
 const int GPS_TX_PIN = 17;
@@ -61,8 +73,12 @@ uint32_t last_countdown_print = 0;
 uint32_t current_loop_delay   = 2000;
 uint32_t current_gps_interval = 300000;
 
+// ===== FIND MY BLE STATE =====
+static uint8_t  fm_adv_payload[31];
+static esp_ble_adv_params_t fm_adv_params;
+static bool fm_is_fast = true;
+
 // ===== LED HELPERS =====
-// Blocking blink — safe to call outside the GPS search loop
 void led_blink(int count, int on_ms, int off_ms) {
   for (int i = 0; i < count; i++) {
     digitalWrite(LED_PIN, HIGH);
@@ -72,7 +88,6 @@ void led_blink(int count, int on_ms, int off_ms) {
   }
 }
 
-// Double-blip once — call repeatedly while WiFi is connecting
 void led_double_blip() {
   digitalWrite(LED_PIN, HIGH); delay(60);
   digitalWrite(LED_PIN, LOW);  delay(60);
@@ -168,6 +183,10 @@ void mpu_read_and_process() {
       Serial.println("[MPU ] State -> STATIONARY");
       current_loop_delay   = 2000;
       current_gps_interval = SAVE_BATTERY_MODE ? 300000 : 30000;
+    }
+    // Adjust Find My BLE rate when motion state changes
+    if (FINDMY_ENABLED && SAVE_BATTERY_MODE) {
+      fm_set_rate(is_moving);
     }
   }
 }
@@ -314,7 +333,6 @@ bool attempt_gps_fix() {
   Serial.println("[GPS ] Searching for fix... (timeout 60s)");
 
   while (millis() - start_m < 60000) {
-    // Feed bytes into both parsers
     while (Serial2.available()) {
       uint8_t c = Serial2.read();
       if (ubx_feed(c)) { ubx_handle(); }
@@ -327,7 +345,6 @@ bool attempt_gps_fix() {
       }
     }
 
-    // Non-blocking LED: short pulse every 2s = "searching"
     uint32_t now = millis();
     if (!led_state && now - last_led_t >= 2000) {
       digitalWrite(LED_PIN, HIGH);
@@ -338,7 +355,6 @@ bool attempt_gps_fix() {
       led_state = false;
     }
 
-    // Status print every 5s
     if (millis() - last_status >= 5000) {
       uint32_t elapsed = (millis() - start_m) / 1000;
       Serial.printf("[GPS ] Searching... %lus | sats=%d | fix=%s\n",
@@ -346,12 +362,11 @@ bool attempt_gps_fix() {
       last_status = millis();
     }
 
-    // Fix acquired
     if (gps.has_fix && gps.sats >= 4) {
       digitalWrite(LED_PIN, LOW);
       Serial.printf("[GPS ] Fix acquired! lat=%.6f lon=%.6f | sats=%d | alt=%.1fm | spd=%.1fkn\n",
                     gps.lat, gps.lon, gps.sats, gps.alt_m, gps.speed_kn);
-      led_blink(5, 80, 80); // 5 rapid blinks = GPS success
+      led_blink(5, 80, 80);
       return true;
     }
 
@@ -360,7 +375,7 @@ bool attempt_gps_fix() {
 
   digitalWrite(LED_PIN, LOW);
   Serial.println("[GPS ] No fix after 60s - moving on");
-  led_blink(2, 600, 300); // 2 long slow blinks = GPS failed
+  led_blink(2, 600, 300);
   return false;
 }
 
@@ -392,7 +407,6 @@ void maintain_record_limit() {
 }
 
 void save_record(bool fix_ok) {
-  // Build timestamp — use GPS time if we have it, otherwise mark as unknown
   char ts[32];
   if (gps.year > 2000) {
     snprintf(ts, sizeof(ts), "%04d-%02d-%02dT%02d:%02d:%02dZ",
@@ -403,7 +417,7 @@ void save_record(bool fix_ok) {
 
   StaticJsonDocument<256> doc;
   doc["ts"]     = ts;
-  doc["fix"]    = fix_ok;           // NEW: tells the app whether GPS locked
+  doc["fix"]    = fix_ok;
   doc["moving"] = is_moving;
   doc["sats"]   = gps.sats;
   doc["sent"]   = false;
@@ -414,7 +428,6 @@ void save_record(bool fix_ok) {
     doc["alt"] = gps.alt_m;
     doc["spd"] = gps.speed_kn;
   } else {
-    // Explicit nulls so the app knows these fields are intentionally absent
     doc["lat"] = nullptr;
     doc["lon"] = nullptr;
     doc["alt"] = nullptr;
@@ -437,7 +450,7 @@ void save_record(bool fix_ok) {
       Serial.printf("[STORE] Record saved (NO FIX) -> %s | moving=%s\n",
                     ts, is_moving ? "yes" : "no");
     }
-    led_blink(1, 120, 0); // 1 short blink = saved to flash
+    led_blink(1, 120, 0);
   } else {
     Serial.println("[STORE] ERROR: Could not open history.jsonl for writing!");
   }
@@ -497,7 +510,7 @@ void attempt_wifi_upload() {
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   uint32_t start_m = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start_m < 10000) {
-    led_double_blip(); // Rapid double-blink = connecting
+    led_double_blip();
     delay(300);
   }
   digitalWrite(LED_PIN, LOW);
@@ -528,23 +541,132 @@ void attempt_wifi_upload() {
 
     if (code == 200) {
       Serial.printf("[WIFI ] Upload OK! %d records sent (HTTP 200)\n", count);
-      led_blink(5, 80, 80);        // 5 rapid blinks
+      led_blink(5, 80, 80);
       digitalWrite(LED_PIN, HIGH);
-      delay(500);                  // then hold ON = all good
+      delay(500);
       digitalWrite(LED_PIN, LOW);
       mark_records_as_sent();
     } else {
       Serial.printf("[WIFI ] Upload FAILED - HTTP code: %d\n", code);
-      led_blink(3, 400, 200);      // 3 slow blinks = upload failed
+      led_blink(3, 400, 200);
     }
   } else {
     Serial.printf("[WIFI ] Could not connect to \"%s\" (10s timeout)\n", WIFI_SSID);
-    led_blink(3, 400, 200);        // 3 slow blinks = no connection
+    led_blink(3, 400, 200);
   }
 
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
   Serial.println("[WIFI ] WiFi off");
+}
+
+// ===== APPLE FIND MY BLE =====
+// Builds the 31-byte raw advertisement payload per Apple Offline Finding spec.
+// Byte layout:
+//   [0]     0x1E        AD length (30 bytes follow)
+//   [1]     0xFF        AD type: Manufacturer Specific Data
+//   [2-3]   0x4C 0x00   Apple Company ID (little-endian)
+//   [4]     0x12        Offline Finding type
+//   [5]     0x19        Offline Finding data length (25)
+//   [6]     0x00        Status byte
+//   [7-28]  key[6..27]  22 bytes of public key
+//   [29]    key[0]>>6   Remaining 2 bits of key byte 0
+//   [30]    0x00        Hint byte
+
+void fm_build_payload() {
+  fm_adv_payload[0]  = 0x1e;
+  fm_adv_payload[1]  = 0xff;
+  fm_adv_payload[2]  = 0x4c;
+  fm_adv_payload[3]  = 0x00;
+  fm_adv_payload[4]  = 0x12;
+  fm_adv_payload[5]  = 0x19;
+  fm_adv_payload[6]  = 0x00;
+  memcpy(&fm_adv_payload[7], &findmy_public_key[6], 22);
+  fm_adv_payload[29] = findmy_public_key[0] >> 6;
+  fm_adv_payload[30] = 0x00;
+}
+
+void fm_set_adv_params(bool fast) {
+  memset(&fm_adv_params, 0, sizeof(fm_adv_params));
+  // Fast: 20-40ms (moving, easily discovered by nearby Apple devices)
+  // Slow: 1000-2000ms (stationary, saves battery but still discoverable)
+  fm_adv_params.adv_int_min       = fast ? 0x0020 : 0x0640;
+  fm_adv_params.adv_int_max       = fast ? 0x0040 : 0x0C80;
+  fm_adv_params.adv_type          = ADV_TYPE_NONCONN_IND;
+  fm_adv_params.own_addr_type     = BLE_ADDR_TYPE_RANDOM;
+  fm_adv_params.channel_map       = ADV_CHNL_ALL;
+  fm_adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+}
+
+bool fm_key_is_placeholder() {
+  for (int i = 0; i < 28; i++) {
+    if (findmy_public_key[i] != 0x00) return false;
+  }
+  return true;
+}
+
+void fm_start() {
+  Serial.println("[BLE  ] Initializing Apple Find My...");
+
+  if (fm_key_is_placeholder()) {
+    Serial.println("[BLE  ] WARNING: findmy_key.h contains all-zero placeholder key!");
+    Serial.println("[BLE  ] Run generate_keys.py and copy the output header file.");
+    Serial.println("[BLE  ] Broadcasting dummy key — Apple devices will ignore it.");
+    digitalWrite(LED_PIN, HIGH);
+    delay(3000);
+    digitalWrite(LED_PIN, LOW);
+  }
+
+  // Use Arduino BLE library for clean BT stack initialization
+  BLEDevice::init("");
+  delay(100);
+
+  // Set BLE random address derived from public key bytes [0..5]
+  // Byte 0 has bits 7:6 forced to 0b11 (non-resolvable private address)
+  esp_bd_addr_t addr;
+  addr[0] = findmy_public_key[0] | 0xC0;
+  memcpy(&addr[1], &findmy_public_key[1], 5);
+  esp_ble_gap_set_rand_addr(addr);
+  delay(50);
+
+  // Build and set raw advertisement payload (no flags — full 31 bytes for Apple)
+  fm_build_payload();
+  esp_ble_gap_config_adv_data_raw(fm_adv_payload, sizeof(fm_adv_payload));
+  delay(50);
+
+  // Start advertising
+  bool fast = !SAVE_BATTERY_MODE || is_moving;
+  fm_set_adv_params(fast);
+  fm_is_fast = fast;
+  esp_ble_gap_start_advertising(&fm_adv_params);
+  delay(50);
+
+  led_blink(4, 60, 60);
+
+  Serial.printf("[BLE  ] Find My active | MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+  Serial.printf("[BLE  ] Adv rate: %s\n", fast ? "FAST (20-40ms)" : "SLOW (1-2s)");
+}
+
+void fm_set_rate(bool fast) {
+  if (fast == fm_is_fast) return;
+  fm_is_fast = fast;
+  esp_ble_gap_stop_advertising();
+  delay(30);
+  fm_set_adv_params(fast);
+  esp_ble_gap_start_advertising(&fm_adv_params);
+  Serial.printf("[BLE  ] Adv rate -> %s\n", fast ? "FAST" : "SLOW");
+}
+
+// Classic BLE beacon (fallback — broadcasts device name for checkpoint scanning)
+void classic_ble_start() {
+  Serial.printf("[BLE  ] Starting classic beacon \"%s\"...\n", BLE_BEACON_NAME);
+  BLEDevice::init(BLE_BEACON_NAME);
+  BLEAdvertising* pAdv = BLEDevice::getAdvertising();
+  pAdv->setScanResponse(true);
+  pAdv->setMinPreferred(0x06);
+  BLEDevice::startAdvertising();
+  Serial.println("[BLE  ] Classic BLE advertising started");
 }
 
 // ===== SETUP =====
@@ -560,15 +682,22 @@ void setup() {
   Serial.println("========================================");
   Serial.printf("  Device ID    : %s\n", DEVICE_ID);
   Serial.printf("  Battery Mode : %s\n", SAVE_BATTERY_MODE ? "ON (MPU-gated GPS)" : "OFF (GPS every 30s)");
+  Serial.printf("  BLE Mode     : %s\n", FINDMY_ENABLED ? "Apple Find My" : "Classic beacon");
   Serial.printf("  Firebase     : %s\n", FIREBASE_HOST);
   Serial.printf("  WiFi SSID    : %s\n", WIFI_SSID);
   Serial.println("========================================\n");
 
   led_blink(3, 100, 100); // 3 fast blinks = boot OK
 
-  btStop();
+  // ===== BLE =====
+  if (FINDMY_ENABLED) {
+    fm_start();
+  } else {
+    classic_ble_start();
+  }
+
   WiFi.mode(WIFI_OFF);
-  Serial.println("[INIT ] Bluetooth stopped, WiFi off");
+  Serial.println("[INIT ] WiFi off");
 
   pinMode(GPS_POWER_PIN, OUTPUT);
   digitalWrite(GPS_POWER_PIN, LOW);
@@ -591,7 +720,7 @@ void setup() {
     size_t total = SPIFFS.totalBytes();
     size_t used  = SPIFFS.usedBytes();
     Serial.printf("[INIT ] SPIFFS OK - %u KB used / %u KB total\n", used/1024, total/1024);
-    led_blink(2, 200, 150); // 2 medium blinks = SPIFFS OK
+    led_blink(2, 200, 150);
   }
 
   if (SAVE_BATTERY_MODE) {
@@ -615,17 +744,19 @@ void loop() {
     last_mpu_poll = millis();
   }
 
-  // Countdown print every 5s so you know it's alive
+  // Countdown print every 5s
   if (now - last_countdown_print >= 5000) {
     uint32_t time_since = now - last_gps_fix_attempt;
     int32_t  secs_left  = ((int32_t)current_gps_interval - (int32_t)time_since) / 1000;
     if (secs_left < 0) secs_left = 0;
-    Serial.printf("[LOOP ] Next GPS in %ds | moving=%s | uptime=%lus\n",
-                  secs_left, is_moving ? "yes" : "no", now / 1000);
+    Serial.printf("[LOOP ] Next GPS in %ds | moving=%s | ble=%s | uptime=%lus\n",
+                  secs_left, is_moving ? "yes" : "no",
+                  FINDMY_ENABLED ? "FindMy" : "classic",
+                  now / 1000);
     last_countdown_print = millis();
   }
 
-  // Heartbeat blink every 5s (tiny blip so you know the board is alive)
+  // Heartbeat blink
   if (now - last_heartbeat >= 5000) {
     digitalWrite(LED_PIN, HIGH); delay(30); digitalWrite(LED_PIN, LOW);
     last_heartbeat = millis();
@@ -642,9 +773,7 @@ void loop() {
       Serial2.end();
     }
 
-    // Always save a record — fix=true has coords, fix=false has nulls
     save_record(got_fix);
-
     attempt_wifi_upload();
 
     last_gps_fix_attempt = millis();
