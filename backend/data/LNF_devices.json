@@ -1,0 +1,15 @@
+[
+  {
+    "id": "lnf",
+    "name": "LNF-MASTER",
+    "privateKey": "xicwVzHc0TgHESq/32WGP/hv7MeOpsvcR0hoYQ==",
+    "publicKey": "cbK7GUlszJKBvKARoe4R00jqyJXXepJruO1G/A==",
+    "symmetricKey": "9nNtf1z/jRuXjKbBxCW/ogG5fNTnPgBjlZLPIIfo+HE=",
+    "privateKeyPKCS8": "MHgCAQAwEAYHKoZIzj0CAQYFK4EEACEEYTBfAgEBBBzGJzBXMdzROAcRKr/fZYY/+G/sx46my9xHSGhhoTwDOgAEcbK7GUlszJKBvKARoe4R00jqyJXXepJruO1G/JEx1c5PbbekLA8ofQmBnP2AVKlPTXrRLJI3y5A=",
+    "icon": "suitcase.fill",
+    "color": "blue",
+    "isDeployed": true,
+    "isActive": true,
+    "additionalKeys": []
+  }
+]
